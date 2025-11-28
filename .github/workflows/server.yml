@@ -1,12 +1,10 @@
-name: Ubuntu 22.04 SSH via Ngrok
+name: Ubuntu 22.04 SSH via Ngrok (Direct Download)
 
 on: [push]
 
 jobs:
   ssh-setup:
-    # تحديد الإصدار Ubuntu 22.04 LTS
     runs-on: ubuntu-22.04
-    # الحد الأقصى للتشغيل
     timeout-minutes: 360
 
     steps:
@@ -16,7 +14,7 @@ jobs:
       run: |
         echo "Installing OpenSSH server..."
         sudo apt-get update
-        sudo apt-get install openssh-server -y
+        sudo apt-get install openssh-server wget unzip jq -y # أضفنا wget و unzip و jq
         sudo systemctl enable ssh
         sudo systemctl start ssh
 
@@ -34,38 +32,31 @@ jobs:
         
         echo "::notice::SSH user $USER created successfully."
         
-    # 3. تثبيت Ngrok (الطريقة الرسمية لـ v3 والمصححة)
-    - name: Install Ngrok (Official v3 Method)
+    # 3. تنزيل وتثبيت Ngrok (الطريقة المباشرة والأكثر موثوقية)
+    - name: Download and install Ngrok
       run: |
-        echo "Installing Ngrok v3..."
-        
-        # إضافة مفتاح الأمان لـ Ngrok
-        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-        
-        # 🌟 التصحيح: تم تغيير 'focal' إلى 'jammy' ليتوافق مع Ubuntu 22.04
-        echo "deb https://ngrok-agent.s3.amazonaws.com jammy main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-        
-        # تحديث وتثبيت
-        sudo apt update
-        sudo apt install ngrok -y
+        echo "Downloading and installing Ngrok..."
+        # تنزيل الملف المضغوط باستخدام رابط ثابت
+        wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -O ngrok.zip
+        # فك الضغط (ينتج الملف القابل للتنفيذ ngrok)
+        unzip ngrok.zip
+        # إزالة الملف المضغوط
+        rm ngrok.zip
         
     # 4. مصادقة Ngrok باستخدام الـ Secret
     - name: Authenticate Ngrok
-      run: ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+      # نستخدم المسار المباشر للملف الذي تم فك ضغطه
+      run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
       
     # 5. بدء Ngrok و طباعة معلومات الاتصال
     - name: Start Ngrok and display connection info
       run: |
-        # بدء نفق TCP على المنفذ 22 (منفذ SSH) في الخلفية
-        ngrok tcp 22 --log=stdout &
+        # بدء نفق TCP على المنفذ 22 (منفذ SSH) في الخلفية باستخدام الملف المباشر
+        ./ngrok tcp 22 --log=stdout &
 
-        # الانتظار لضمان إنشاء النفق
         sleep 10
         
-        # التأكد من تثبيت jq قبل الاستخدام
-        sudo apt-get install jq -y
-        
-        # استرداد عنوان النفق من واجهة برمجة تطبيقات Ngrok
+        # استرداد عنوان النفق
         TUNNEL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
 
         if [ -z "$TUNNEL_URL" ]; then
@@ -82,12 +73,11 @@ jobs:
         echo "=========================================="
         echo "Address (Host:Port): $HOST_PORT"
         echo "Username: ubuntuuser"
-        echo "Password: UbntSsh@2025!" # تأكد من استخدام كلمة المرور التي اخترتها
+        echo "Password: UbntSsh@2025!"
         echo "------------------------------------------"
         echo "SSH Command: ssh ubuntuuser@$HOST_PORT"
         echo "=========================================="
         
-        # إبقاء الـ Job حياً لمدة 6 ساعات
         while true; do
             sleep 300
         done
