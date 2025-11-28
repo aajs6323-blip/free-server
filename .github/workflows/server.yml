@@ -1,0 +1,81 @@
+name: Ubuntu 22.04 SSH via Ngrok
+
+on: [push]
+
+jobs:
+  ssh-setup:
+    # 🌟 تم تحديد الإصدار Ubuntu 22.04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+    
+    # 1. تثبيت SSH وتفعيل الخدمة
+    - name: Setup SSH Server
+      run: |
+        sudo apt-get update
+        sudo apt-get install openssh-server -y
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+
+    # 2. إنشاء مستخدم SSH وكلمة مرور
+    - name: Create SSH User
+      run: |
+        USER="ubuntuuser"
+        # ⚠️ استخدم كلمة مرور قوية ومعقدة هنا
+        PASSWORD="UbntSsh@2025!" 
+        
+        sudo useradd -m -s /bin/bash $USER
+        echo "$USER:$PASSWORD" | sudo chpasswd
+        sudo usermod -aG sudo $USER
+        
+        echo "::notice::SSH user $USER created successfully."
+        
+    # 3. تنزيل Ngrok
+    - name: Download and install Ngrok
+      run: |
+        curl -s https://ngrok-builds.s3.amazonaws.com/ngrok_linux_amd64.zip -o ngrok.zip
+        unzip ngrok.zip
+        rm ngrok.zip
+        
+    # 4. مصادقة Ngrok باستخدام الـ Secret
+    - name: Authenticate Ngrok
+      run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+      
+    # 5. بدء Ngrok و طباعة معلومات الاتصال
+    - name: Start Ngrok and display connection info
+      run: |
+        ./ngrok tcp 22 --log=stdout &
+
+        sleep 10
+        
+        # تتطلب هذه الخطوة تثبيت jq لاستخراج البيانات من JSON. نضيفها للتأكد.
+        sudo apt-get install jq -y
+        TUNNEL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+
+        if [ -z "$TUNNEL_URL" ]; then
+          echo "::error::Failed to establish Ngrok tunnel"
+          exit 1
+        fi
+        
+        HOST_PORT=$(echo "$TUNNEL_URL" | sed 's/tcp:\/\///')
+        
+        echo "=========================================="
+        echo "||       SSH CONNECTION DETAILS         ||"
+        echo "=========================================="
+        echo "Address (Host:Port): $HOST_PORT"
+        echo "Username: ubuntuuser"
+        echo "Password: UbntSsh@2025!"
+        echo "------------------------------------------"
+        echo "SSH Command: ssh ubuntuuser@$HOST_PORT"
+        echo "=========================================="
+        
+        while true; do
+            sleep 300
+        done
+        
+    # 6. خطوة تنظيف إجبارية
+    - name: Force cleanup
+      if: always()
+      run: |
+        pkill ngrok || true
