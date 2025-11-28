@@ -1,62 +1,75 @@
-name: Ubuntu 22.04 SSH via Ngrok (Direct Download)
+name: Ubuntu Desktop with noVNC and Ngrok Tunnel
 
-on: [push]
+on:
+  workflow_dispatch: # يسمح بالتشغيل اليدوي من واجهة GitHub
 
 jobs:
-  ssh-setup:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 360
+  run-desktop:
+    runs-on: ubuntu-latest # يعمل على أحدث إصدار من Ubuntu
+    timeout-minutes: 360 # 6 ساعات حد أقصى
 
     steps:
-    
-    # 1. تثبيت SSH وتفعيل الخدمة
-    - name: Setup SSH Server
+    - name: Install dependencies (Desktop, VNC, noVNC tools)
       run: |
-        echo "Installing OpenSSH server..."
-        sudo apt-get update
-        sudo apt-get install openssh-server wget unzip jq -y # أضفنا wget و unzip و jq
-        sudo systemctl enable ssh
-        sudo systemctl start ssh
+        echo "Installing Desktop and VNC dependencies..."
+        # تثبيت سطح المكتب (XFCE4)، VNC، وأدوات التنزيل
+        sudo apt update
+        sudo apt install -y xfce4 xfce4-goodies tightvncserver git curl wget unzip jq openssh-client
+        # تثبيت أدوات noVNC
+        sudo apt install -y python3 python3-pip
+        pip3 install websockify
 
-    # 2. إنشاء مستخدم SSH وكلمة مرور
-    - name: Create SSH User
+    - name: Setup VNC server and noVNC
       run: |
-        USER="ubuntuuser"
-        # ⚠️ استخدم كلمة مرور قوية ومعقدة هنا!
-        PASSWORD="UbntSsh@2025!" 
+        echo "Setting up VNC server..."
+        # 1. إعداد كلمة مرور لـ VNC
+        mkdir -p ~/.vnc
+        echo "123456" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
+
+        # 2. إعداد ملف تشغيل سطح المكتب (xstartup)
+        echo '#!/bin/bash
+        xrdb $HOME/.Xresources
+        startxfce4 &' > ~/.vnc/xstartup
+        chmod +x ~/.vnc/xstartup
+
+        # 3. بدء VNC لضبط الإعدادات
+        vncserver :1 -geometry 1280x720 -depth 24
+        vncserver -kill :1
+        vncserver :1 -geometry 1280x720 -depth 24
+
+        # 4. تنزيل noVNC
+        git clone https://github.com/novnc/noVNC.git ~/noVNC
+        git clone https://github.com/novnc/websockify.git ~/noVNC/utils/websockify
+
+    - name: Run noVNC server (on port 6080)
+      run: |
+        # تشغيل noVNC لتحويل VNC (5901) إلى WebSocket (6080)
+        echo "Starting noVNC on port 6080..."
+        nohup ~/noVNC/utils/launch.sh --vnc localhost:5901 --listen 6080 &
         
-        echo "Creating user $USER..."
-        sudo useradd -m -s /bin/bash $USER
-        echo "$USER:$PASSWORD" | sudo chpasswd
-        sudo usermod -aG sudo $USER
-        
-        echo "::notice::SSH user $USER created successfully."
-        
-    # 3. تنزيل وتثبيت Ngrok (الطريقة المباشرة والأكثر موثوقية)
+    # 4. تثبيت Ngrok (الطريقة المباشرة الموثوقة)
     - name: Download and install Ngrok
       run: |
         echo "Downloading and installing Ngrok..."
-        # تنزيل الملف المضغوط باستخدام رابط ثابت
         wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -O ngrok.zip
-        # فك الضغط (ينتج الملف القابل للتنفيذ ngrok)
         unzip ngrok.zip
-        # إزالة الملف المضغوط
         rm ngrok.zip
         
-    # 4. مصادقة Ngrok باستخدام الـ Secret
+    # 5. مصادقة Ngrok
     - name: Authenticate Ngrok
-      # نستخدم المسار المباشر للملف الذي تم فك ضغطه
       run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
       
-    # 5. بدء Ngrok و طباعة معلومات الاتصال
+    # 6. بدء Ngrok و طباعة معلومات الاتصال
     - name: Start Ngrok and display connection info
       run: |
-        # بدء نفق TCP على المنفذ 22 (منفذ SSH) في الخلفية باستخدام الملف المباشر
-        ./ngrok tcp 22 --log=stdout &
+        # بدء نفق TCP لمنفذ noVNC (6080)
+        echo "Starting Ngrok tunnel..."
+        ./ngrok tcp 6080 --log=stdout &
 
-        sleep 10
+        # انتظار النفق للإنشاء
+        sleep 15
         
-        # استرداد عنوان النفق
         TUNNEL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
 
         if [ -z "$TUNNEL_URL" ]; then
@@ -64,26 +77,31 @@ jobs:
           exit 1
         fi
         
-        # إزالة بادئة tcp:// للحصول على العنوان:المنفذ
         HOST_PORT=$(echo "$TUNNEL_URL" | sed 's/tcp:\/\///')
-        
-        # عرض البيانات
+
         echo "=========================================="
-        echo "||       SSH CONNECTION DETAILS         ||"
+        echo "||    VNC DESKTOP CONNECTION DETAILS    ||"
         echo "=========================================="
-        echo "Address (Host:Port): $HOST_PORT"
-        echo "Username: ubuntuuser"
-        echo "Password: UbntSsh@2025!"
+        echo "VNC Password: 123456"
+        echo "Connection Address: $HOST_PORT"
         echo "------------------------------------------"
-        echo "SSH Command: ssh ubuntuuser@$HOST_PORT"
+        echo "Instructions:"
+        # 1. افتح العنوان كـ HTTP في المتصفح
+        echo "1. Open this URL in your browser: http://$HOST_PORT"
+        # 2. العنوان المستهدف هو VNC
+        echo "2. In the noVNC page, connect to: localhost:5901"
+        # 3. كلمة مرور VNC
+        echo "3. Enter password 123456 when prompted."
         echo "=========================================="
         
+        # إبقاء الـ Job حياً
         while true; do
             sleep 300
         done
-        
-    # 6. خطوة تنظيف إجبارية
+            
+    # 7. خطوة تنظيف إجبارية
     - name: Force cleanup
       if: always()
       run: |
         pkill ngrok || true
+        pkill Xtightvnc || true
