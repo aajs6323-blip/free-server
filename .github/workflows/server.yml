@@ -1,4 +1,4 @@
-name: Ubuntu SSH via Ngrok (EU Region)
+name: Ubuntu SSH via Ngrok (Germany EU Region)
 
 on: [push]
 
@@ -14,7 +14,7 @@ jobs:
       run: |
         echo "Installing OpenSSH server..."
         sudo apt-get update
-        sudo apt-get install openssh-server wget unzip jq -y # أضفنا wget و unzip و jq
+        sudo apt-get install openssh-server wget unzip jq -y
         sudo systemctl enable ssh
         sudo systemctl start ssh
 
@@ -22,7 +22,7 @@ jobs:
     - name: Create SSH User
       run: |
         USER="ubuntuuser"
-        # ⚠️ تأكد من استخدام كلمة المرور القوية هذه
+        # ⚠️ استخدم كلمة مرور قوية ومعقدة
         PASSWORD="UbntSsh@2025!" 
         
         echo "Creating user $USER..."
@@ -32,7 +32,7 @@ jobs:
         
         echo "::notice::SSH user $USER created successfully."
         
-    # 3. تنزيل وتثبيت Ngrok (الطريقة المباشرة الموثوقة)
+    # 3. تنزيل وتثبيت Ngrok
     - name: Download and install Ngrok
       run: |
         echo "Downloading and installing Ngrok..."
@@ -47,7 +47,7 @@ jobs:
     # 5. بدء Ngrok و طباعة معلومات الاتصال
     - name: Start Ngrok and display connection info
       run: |
-        # 🌟 التصحيح: تم إضافة --region eu لتوجيه النفق إلى أوروبا 
+        # 🌟 تم إضافة --region eu لتوجيه النفق إلى خوادم ألمانيا/أوروبا
         ./ngrok tcp 22 --region eu --log=stdout & 
 
         sleep 10
@@ -63,7 +63,7 @@ jobs:
         
         # عرض البيانات
         echo "=========================================="
-        echo "||       SSH CONNECTION DETAILS (EU)    ||"
+        echo "||       SSH CONNECTION DETAILS (DE)    ||"
         echo "=========================================="
         echo "Address (Host:Port): $HOST_PORT"
         echo "Username: ubuntuuser"
