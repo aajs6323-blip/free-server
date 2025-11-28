@@ -34,21 +34,23 @@ jobs:
         
         echo "::notice::SSH user $USER created successfully."
         
-    # 3. تثبيت Ngrok (الطريقة الرسمية لـ v3)
+    # 3. تثبيت Ngrok (الطريقة الرسمية لـ v3 والمصححة)
     - name: Install Ngrok (Official v3 Method)
       run: |
         echo "Installing Ngrok v3..."
+        
         # إضافة مفتاح الأمان لـ Ngrok
         curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-        # إضافة مستودع Ngrok
-        echo "deb https://ngrok-agent.s3.amazonaws.com focal main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+        
+        # 🌟 التصحيح: تم تغيير 'focal' إلى 'jammy' ليتوافق مع Ubuntu 22.04
+        echo "deb https://ngrok-agent.s3.amazonaws.com jammy main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+        
         # تحديث وتثبيت
         sudo apt update
         sudo apt install ngrok -y
         
     # 4. مصادقة Ngrok باستخدام الـ Secret
     - name: Authenticate Ngrok
-      # نستخدم 'ngrok' مباشرة لأنه تم تثبيته كأمر نظام
       run: ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
       
     # 5. بدء Ngrok و طباعة معلومات الاتصال
@@ -71,7 +73,7 @@ jobs:
           exit 1
         fi
         
-        # إزالة بادئة tcp://
+        # إزالة بادئة tcp:// للحصول على العنوان:المنفذ
         HOST_PORT=$(echo "$TUNNEL_URL" | sed 's/tcp:\/\///')
         
         # عرض البيانات
